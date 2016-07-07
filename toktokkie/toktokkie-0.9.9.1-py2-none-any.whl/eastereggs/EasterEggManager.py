@@ -1,0 +1,62 @@
+u"""
+LICENSE:
+Copyright 2015,2016 Hermann Krumrey
+
+This file is part of toktokkie.
+
+    toktokkie is a program that allows convenient managing of various
+    local media collections, mostly focused on video.
+
+    toktokkie is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    toktokkie is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with toktokkie.  If not, see <http://www.gnu.org/licenses/>.
+LICENSE
+"""
+
+# imports
+from __future__ import absolute_import
+from typing import List
+
+import toktokkie.metadata as metadata
+from toktokkie.eastereggs.LeetPrint import LeetPrint
+
+
+class EasterEggManager(object):
+    u"""
+    Class that manages easter eggs in the program
+    """
+
+    # noinspection PyTypeChecker
+    @staticmethod
+    def activate_easter_eggs(sysargs, program_args):
+        u"""
+        Method that activates various easter eggs depending on specific metadata like the version number
+        or a sys.argv argument
+        :param sysargs: sys.argv from the caller
+        :param program_args: arguments given programmatically
+        :return: None
+        """
+        # Check if the given program_args are not None
+        if program_args is not None:
+            prog_args = program_args
+        else:
+            prog_args = []
+
+        if LeetPrint is not None:
+            # Activate leet speak if the version number contains the phrase 1337 or if the user gave the
+            # arguments --1337 or --leet or 'leet'/'1337' programmatically
+            if u"1337" in metadata.version_number\
+                    or u"--1337" in sysargs \
+                    or u"--leet" in sysargs\
+                    or u"1337" in prog_args\
+                    or u"leet" in prog_args:
+                LeetPrint.activate_leet(True)
