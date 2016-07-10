@@ -1,0 +1,400 @@
+# encoding: utf8
+
+from collections import defaultdict
+from datetime import datetime
+from operator import attrgetter
+import os
+from shutil import copyfile
+import warnings
+
+from jinja2 import Environment, FileSystemLoader
+import toml
+
+from .lib import relative_list_of_files_in_directory
+from .source import JsonSourceFile, MarkdownSourceFile, TomlSourceFile
+from .url import URL
+from .version import __version__    # noqa: F401
+
+
+class Flourish(object):
+    ARGS = [
+        'source_dir',
+        'templates_dir',
+        'jinja',
+    ]
+    DATA = [
+        '_filters',
+        '_order_by',
+        '_slice',
+        '_source_files',
+        '_source_url',
+        '_urls',
+    ]
+
+    def __init__(
+        self,
+        source_dir='source',
+        templates_dir='templates',
+        output_dir='output',
+        assets_dir='assets',
+        global_context=None,
+        **kwargs
+    ):
+        self.source_dir = source_dir
+        self.templates_dir = templates_dir
+        self.output_dir = output_dir
+        self.assets_dir = assets_dir
+        self.global_context = global_context
+        self.jinja = Environment(
+            loader=FileSystemLoader(self.templates_dir),
+            keep_trailing_newline=True,
+        )
+
+        self._filters = []
+        self._order_by = []
+        self._slice = None
+        self._source_files = []
+        self._source_url = None
+        self._urls = {}
+
+        if not os.path.isdir(self.source_dir):
+            raise AttributeError(
+                'source_dir "%s" must exist' % self.source_dir)
+
+        for _opt in self.DATA:
+            if _opt in kwargs:
+                if kwargs[_opt] is not None:
+                    setattr(self, _opt, kwargs[_opt])
+
+        self.site_config = self._read_site_config()
+
+        if '_source_files' not in kwargs:
+            self._add_sources()
+
+    @property
+    def sources(self):
+        return self
+
+    def all(self):
+        """ Get all source documents. """
+        return self
+
+    def count(self):
+        """ Get the count of all source documents. """
+        _sources = 0
+        for source in self.sources.all():
+            _sources += 1
+        return _sources
+
+    def get(self, slug):
+        """ Get a single source document by slug. """
+        for source in self.sources.all():
+            if source.slug == slug:
+                return source
+        raise TomlSourceFile.DoesNotExist
+
+    def filter(self, **kwargs):
+        _clone = self.clone()
+        for _key, _value in kwargs.iteritems():
+            _clone._filters.append((_key, _value))
+        return _clone
+
+    def exclude(self, **kwargs):
+        _clone = self.clone()
+        for _key, _value in kwargs.iteritems():
+            if '__' in _key:
+                _field, _operator = _key.split('__', 2)
+            else:
+                _field, _operator = _key, 'eq'
+            _new_operator = INVERSE_OPERATORS.get(_operator)
+            _key = '%s__%s' % (_field, _new_operator)
+            _clone._filters.append((_key, _value))
+        return _clone
+
+    def order_by(self, *args):
+        return self.clone(_order_by=args)
+
+    def canonical_source_url(self, url, generator):
+        # FIXME hmmmm
+        self._source_url = URL(self, url, 'source', generator)
+        self.add_url(url, 'source', generator)
+
+    def add_url(self, url, name, generator):
+        _url_dict = {name: URL(self, url, name, generator)}
+        self._urls.update(_url_dict)
+
+    def resolve_url(self, name, **kwargs):
+        return self._urls[name].resolve(**kwargs)
+
+    def all_valid_filters_for_url(self, name):
+        return self._urls[name].all_valid_filters()
+
+    def all_valid_dates(self):
+        def recursively_default_dict():
+            return defaultdict(recursively_default_dict)
+
+        _captured = recursively_default_dict()
+        for _source in self.sources.all():
+            try:
+                _date = getattr(_source, 'published')
+                _captured[_date.year][_date.month][_date.day] = 1
+            except AttributeError:
+                pass
+
+        _dates = []
+        for _year in sorted(_captured):
+            _months = []
+            for _month in sorted(_captured[_year]):
+                _days = []
+                for _day in sorted(_captured[_year][_month]):
+                    _days.append({'day': '%02d' % _day})
+                _months.append({'month': '%02d' % _month, 'days': _days})
+            _dates.append({'year': '%04d' % _year, 'months': _months})
+        return _dates
+
+    def generate_all_urls(self):
+        for _entry in self._urls:
+            url = self._urls[_entry]
+            url.generator(self, url, self.global_context)
+
+    def set_global_context(self, global_context):
+        self.global_context = global_context
+
+    def get_publication_range(self):
+        _lowest = None
+        _highest = None
+
+        for _source in self.sources.all():
+            try:
+                _pub = getattr(_source, 'published')
+                _year = _pub.year
+                if _lowest is None or _year < _lowest:
+                    _lowest = _year
+                if _highest is None or _year > _highest:
+                    _highest = _year
+            except AttributeError:
+                pass
+
+        if _lowest is not None and _highest is not None:
+            return u'%d–%d' % (_lowest, _highest)
+
+    def copy_assets(self):
+        if self.assets_dir:
+            # FIXME refactor this to be used elsewhere
+            _files = relative_list_of_files_in_directory(self.assets_dir)
+            for _file in _files:
+                _source = '%s/%s' % (self.assets_dir, _file)
+                _destination = '%s/%s' % (self.output_dir, _file)
+                _directory = os.path.dirname(_destination)
+                if not os.path.isdir(_directory):
+                    os.makedirs(_directory)
+                copyfile(_source, _destination)
+
+    def clone(self, **kwargs):
+        for _option in self.ARGS + self.DATA:
+            _value = getattr(self, _option)
+            if type(_value) == list:
+                kwargs.setdefault(_option, _value[:])
+            else:
+                kwargs.setdefault(_option, _value)
+        return type(self)(**kwargs)
+
+    def _read_site_config(self):
+        _config_file = '%s/_site.toml' % self.source_dir
+        with open(_config_file) as _file:
+            _config = toml.loads(_file.read())
+        for key in ('author', 'title', 'base_url'):
+            if key not in _config:
+                raise RuntimeError(
+                    '"%s" is a required entry in _site.toml' % key)
+        return _config
+
+    def _add_sources(self):
+        """ Find source documents and register them. """
+        trim = len(self.source_dir) + 1
+        for root, dirs, files in os.walk(self.source_dir):
+            this_dir = root[trim:]
+            for file in files:
+                # FIXME check for slug-ishness and otherwise ignore
+                # (this could simplify _site.toml by being just another
+                # ignored filename?)
+                if len(this_dir):
+                    file = '%s/%s' % (this_dir, file)
+                if file == '_site.toml':
+                    continue
+                if file.endswith('.toml'):
+                    self._source_files.append(TomlSourceFile(self, file))
+                elif file.endswith('.markdown') and len(file.split('.')) == 2:
+                    self._source_files.append(MarkdownSourceFile(self, file))
+                elif file.endswith('.json'):
+                    self._source_files.append(JsonSourceFile(self, file))
+
+    def __len__(self):
+        return self.count()
+
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            if (item.start < 0) or (item.stop < 0):
+                raise ValueError('Cannot use negative indexes with Flourish')
+            return self.clone(_slice=item)
+        if item < 0:
+            raise ValueError('Cannot use negative indexes with Flourish')
+        _iterator = iter(self)
+        try:
+            for i in range(0, item+1):
+                obj = next(_iterator)
+        except StopIteration:
+            raise IndexError(item)
+        return obj
+        return None
+
+    def _get_filtered_sources(self):
+        _sources = []
+        for _source in self._source_files:
+            _add = True
+            if len(self._filters):
+                for _filter in self._filters:
+                    if '__' in _filter[0]:
+                        _field, _operator = _filter[0].split('__', 2)
+                    else:
+                        _field, _operator = _filter[0], 'eq'
+                    _operation = OPERATORS.get(_operator)
+                    if _operation is None:
+                        # FIXME write test and raise more useful error
+                        raise RuntimeError
+                    _is_date_filter = (
+                        _field in ['year', 'month', 'day'] and
+                        'published' in _source and
+                        type(_source['published'] == datetime)
+                    )
+
+                    try:
+                        if _is_date_filter:
+                            _test = '%02d' % getattr(
+                                _source['published'], _field)
+                        else:
+                            _test = getattr(_source, _field)
+                    except AttributeError:
+                        _test = None
+
+                    _result = _operation(_test, _filter[1])
+                    if not _result:
+                        _add = False
+            if _add:
+                _sources.append(_source)
+        if self._slice is not None:
+            _sources = _sources.__getitem__(self._slice)
+        return _sources
+
+    def __iter__(self):
+        _sources = self._get_filtered_sources()
+        for _order in self._order_by:
+            if _order[0] == '-':
+                _rev = True
+                _attr = _order[1:]
+            else:
+                _rev = False
+                _attr = _order
+            try:
+                _sources = sorted(
+                    _sources, key=attrgetter(_attr), reverse=_rev)
+            except AttributeError:
+                warnings.warn(
+                    'sorting sources by "%s" failed: '
+                    'not all sources have that attribute' % _order
+                )
+
+        return iter(_sources)
+
+    def __repr__(self):
+        return '<flourish.Flourish object (source=%s)' % self.source_dir
+
+
+def _equal_or_inside(value, test):
+    if type(value) == list:
+        return test in value
+    else:
+        return value == test
+
+
+def _not_equal_or_inside(value, test):
+    return not _equal_or_inside(value, test)
+
+
+def _less_than(value, test):
+    return value < test
+
+
+def _less_than_or_equal_to(value, test):
+    return value <= test
+
+
+def _greater_than(value, test):
+    return value > test
+
+
+def _greater_than_or_equal_to(value, test):
+    return value >= test
+
+
+def _contains(value, test):
+    try:
+        if type(value) == list:
+            for _v in value:
+                if test in _v:
+                    return True
+            return False
+        else:
+            return test in value
+    except TypeError:
+        return False
+
+
+def _excludes(value, test):
+    return not _contains(value, test)
+
+
+def _inside(value, test):
+    return value in test
+
+
+def _outside(value, test):
+    return value not in test
+
+
+def _set(value, test):
+    return value is not None
+
+
+def _unset(value, test):
+    return value is None
+
+
+OPERATORS = {
+    'eq': _equal_or_inside,
+    'neq': _not_equal_or_inside,
+    'lt': _less_than,
+    'lte': _less_than_or_equal_to,
+    'gt': _greater_than,
+    'gte': _greater_than_or_equal_to,
+    'contains': _contains,
+    'excludes': _excludes,
+    'in': _inside,
+    'notin': _outside,
+    'set': _set,
+    'unset': _unset,
+}
+INVERSE_OPERATORS = {
+    'neq': 'eq',
+    'eq': 'neq',
+    'lt': 'gte',
+    'lte': 'gt',
+    'gt': 'lte',
+    'gte': 'lt',
+    'contains': 'excludes',
+    'excludes': 'contains',
+    'in': 'notin',
+    'notin': 'in',
+    'set': 'unset',
+    'unset': 'set',
+}
