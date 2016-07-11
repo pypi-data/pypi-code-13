@@ -1,0 +1,23 @@
+from distutils.core import setup
+setup(
+  name = 'tolliver',
+  packages = ['tolliver'],
+  version = '0.1b',
+  description = 'An application for dialing in CNC hole tolerances',
+  author = 'CastIrony',
+  author_email = 'bergamot@gmail.com',
+  url = 'https://github.com/castirony/tolliver',
+  license = 'MIT',
+  download_url = 'https://github.com/castirony/tolliver/tarball/0.1b',
+  keywords = ['cnc', 'tolerance'],
+  requires = ['docopt', 'cerberus', 'ezdxf'],
+  classifiers = ["Development Status :: 4 - Beta",
+                 "Environment :: Console",
+                 "Intended Audience :: Manufacturing",
+                 "License :: OSI Approved :: MIT License",
+                 "Natural Language :: English",
+                 "Operating System :: OS Independent",
+                 "Programming Language :: Python",
+                 "Topic :: Utilities",
+                 ],
+)
