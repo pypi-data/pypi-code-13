@@ -1,0 +1,61 @@
+import json
+import sys
+import django
+import platform
+from django.http import HttpResponse, Http404
+from django.db import connection
+from django.conf import settings
+import pip
+
+def get_packages():
+    """
+    Return list of installed packages in the virtualenv of application
+    """
+    return sorted(["%s==%s" % (i.key, i.version) for i in pip.get_installed_distributions()])
+
+def get_django_version():
+    """
+    Return the version of Django
+    """
+    return django.__version__
+
+def get_python_version():
+    """
+    Return the version of python
+    """
+    return ".".join(map(str, sys.version_info[:3]))
+
+def get_database_version():
+    """
+    Return the version of database
+    """
+    cursor = connection.cursor()
+    cursor.execute("SELECT VERSION();")
+    row = cursor.fetchone()
+    return row[0]
+
+def get_os_version():
+    """
+    Return the version of OS
+    """
+    return platform.platform()
+
+def get_information(request):
+    """
+    Return information about the application
+    """
+
+    information_dict = {}
+    information_dict['service_name'] = settings.APPLICATION_NAME
+    information_dict['django_version'] = get_django_version()
+    information_dict['python_version'] = get_python_version()
+    information_dict['db_version'] = get_database_version()
+    information_dict['os_version'] = get_os_version()
+    information_dict['packages'] = get_packages()
+
+    data = json.dumps(information_dict)
+
+    return HttpResponse(
+        data,
+        content_type='application/javascript; charset=utf8'
+    )
