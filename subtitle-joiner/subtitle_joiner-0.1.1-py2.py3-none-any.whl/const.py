@@ -1,0 +1,10 @@
+
+EXTENSIONS = ['.jpg', '.jpeg', 'png']
+
+DEFAULT_OUTPUT_WIDTH = 640
+
+DEFAULT_SUBTITLE_HEIGHT = 160
+
+DEFAULT_BORDER = 0
+
+MERGE_ACTIONS = ['subtitle', 'image']
