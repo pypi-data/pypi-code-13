@@ -1,0 +1,26 @@
+from setuptools import setup
+
+setup(name='static_response_server',
+      version='0.2',
+      description='Static response server for REST pocs',
+      url='https://github.com/alexrochas/static-response-server',
+      author='Alex Rocha',
+      author_email='alex.rochas@yahoo.com.br',
+      license='MIT',
+      packages=['server'],
+      install_requires=['click==6.6',
+                        'coverage==4.1',
+                        'coveralls==1.1',
+                        'docopt==0.6.2',
+                        'Flask==0.11.1',
+                        'itsdangerous==0.24',
+                        'Jinja2==2.8',
+                        'MarkupSafe==0.23',
+                        'nose==1.3.7',
+                        'requests==2.10.0',
+                        'Werkzeug==0.11.10'],
+      entry_points={
+          'console_scripts': ['static-response-server=server.server:start'],
+      },
+      include_package_data=True,
+      zip_safe=False)
