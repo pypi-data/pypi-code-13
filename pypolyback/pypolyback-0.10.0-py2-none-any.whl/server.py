@@ -1,0 +1,33 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*- 
+
+from twisted.internet import reactor
+
+from pypolyback import log, routes, config
+
+def start():
+    """
+    Starts server
+    """
+    
+    #log
+    if config.value['log']:
+        log.start()
+    else:
+        #TODO: log.start() on sql
+        pass
+    
+    #settings
+    settings = {
+        "debug": config.value['scope'] is not 'prod'
+    }
+    
+    if config.value['mail']:
+        settings['email_settings'] = config.value['mail']
+
+    application = routes.prepare()
+    
+    reactor.listenTCP(config.value['server']['port'], application)
+    
+    #start
+    reactor.run()
