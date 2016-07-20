@@ -1,0 +1,2 @@
+class CircularException(Exception):
+    pass
