@@ -1,0 +1,126 @@
+# ----------------------------------------------------------------------------
+# Copyright 2015 Nervana Systems Inc.
+# ----------------------------------------------------------------------------
+"""
+Subcommands for launching an interactive environment.
+"""
+import logging
+from ncloud.commands.command import Command
+from ncloud.util.api_call import api_call_json
+from ncloud.config import INTERACT
+from ncloud.formatting.output import print_table
+
+logger = logging.getLogger()
+
+
+class Interact(Command):
+    @classmethod
+    def parser(cls, subparser):
+        interact = subparser.add_parser("interact",
+                                        help="Launch an interactive"
+                                             " ipython notebook "
+                                             " environment.")
+        interact.add_argument("-d", "--dataset_id",
+                              help="id of dataset to mount in notebook")
+        interact.add_argument("--framework_version",
+                              help="Neon tag, branch or commit to use.")
+        interact.add_argument("--resume_model_id",
+                              help="Start training a new model using the state"
+                                   " parameters of a previous one.")
+        interact.add_argument("-g", "--gpus", default=1,
+                              help="Number of GPUs to train this model with.")
+        interact.add_argument("--custom_code_url",
+                              help="URL for codebase containing custom neon "
+                                   "scripts and extensions.")
+        interact.add_argument("--custom_code_commit", default="master",
+                              help="Commit ID or branch specifier for custom "
+                                   "code repo.")
+
+        interact.set_defaults(func=cls.arg_call)
+
+    @staticmethod
+    def call(config, gpus=1, dataset_id=None, framework_version=None,
+             custom_code_url=None, resume_model_id=None,
+             custom_code_commit=None):
+
+        vals = {"gpus": gpus}
+        if framework_version:
+            vals["framework_version"] = framework_version
+
+        if dataset_id:
+            vals["dataset_id"] = dataset_id
+
+        if resume_model_id:
+            vals["resume_model_id"] = resume_model_id
+
+        if custom_code_url:
+            vals["custom_code_url"] = custom_code_url
+
+        if custom_code_commit:
+            vals["custom_code_commit"] = custom_code_commit
+
+        return api_call_json(config, INTERACT, method="POST", data=vals)
+
+    @staticmethod
+    def display_after(config, args, res):
+        if 'uuid' in res:
+            res['url'] = config.get_default_host() \
+                               .rstrip('/') + '/interact/' + res['uuid']
+            del res['uuid']
+
+            print_table(res)
+
+
+class InteractStop(Command):
+    @classmethod
+    def parser(cls, subparser):
+        interact = subparser.add_parser("interact-stop",
+                                        help="Stop an interactive"
+                                             " environment.")
+        interact.add_argument("id", nargs="+",
+                              help="id or list of IDs of sessions to stop")
+        interact.set_defaults(func=cls.arg_call)
+
+    @staticmethod
+    def call(config, id):
+
+        res = []
+        for stop in id:
+            try:
+                res.append(api_call_json(config, INTERACT+"/{}"
+                           .format(stop), method="Delete"))
+            except Exception:
+                pass
+
+        return res
+
+
+class InteractList(Command):
+    @classmethod
+    def parser(cls, subparser):
+        interact = subparser.add_parser("interact-list",
+                                        help="List interactive sessions.")
+        interact.add_argument("--all", action="store_true",
+                              help="Show sessions in all states.")
+        interact.add_argument("-n", "--count", type=int, default='10',
+                              help="Show up to n most recent sessions. "
+                                   "For unlimited set n=0.")
+        interact.set_defaults(func=cls.arg_call)
+
+    @staticmethod
+    def call(config, all=False, count=10):
+        vals = {"count": count}
+        if not all:
+            vals["filter"] = ["Ready", "Launching"]
+
+        res = api_call_json(config, INTERACT, method="Get", params=vals)
+
+        if 'sessions' in res:
+            # adjust content for display, show full URL rather than uuid
+            res = res['sessions']
+            for r in res:
+                r['url'] = config.get_default_host().rstrip('/') + \
+                           '/interact/' + r['uuid']
+                del r['uuid']
+
+        return res
