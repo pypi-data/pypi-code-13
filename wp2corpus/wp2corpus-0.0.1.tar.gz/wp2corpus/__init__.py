@@ -1,0 +1,1 @@
+from .Wikimedia import Wikimedia
