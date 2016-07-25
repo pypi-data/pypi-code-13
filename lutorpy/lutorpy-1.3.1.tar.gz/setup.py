@@ -1,0 +1,300 @@
+
+import sys
+import os
+
+from glob import iglob
+
+try:
+    # use setuptools if available
+    from setuptools import setup, Extension
+except ImportError:
+    from distutils.core import setup, Extension
+
+VERSION = '1.3.1'
+
+extra_setup_args = {}
+
+
+# support 'test' target if setuptools/distribute is available
+
+if 'setuptools' in sys.modules:
+    extra_setup_args['test_suite'] = 'lutorpy.tests.suite'
+    extra_setup_args["zip_safe"] = False
+
+
+class PkgConfigError(RuntimeError):
+    pass
+
+
+def try_int(s):
+    try:
+        return int(s)
+    except ValueError:
+        return s
+
+
+def cmd_output(command):
+    """
+    Returns the exit code and output of the program, as a triplet of the form
+    (exit_code, stdout, stderr).
+    """
+    env = os.environ.copy()
+    if not env.has_key('PKG_CONFIG_PATH'):
+        env['PKG_CONFIG_PATH'] = ''
+    env['PKG_CONFIG_PATH'] = env['PKG_CONFIG_PATH'] + ':' + os.getcwd()
+    env['LANG'] = ''
+    import subprocess
+    proc = subprocess.Popen(command,
+                            shell=True,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            env=env)
+    stdout, stderr = proc.communicate()
+    exit_code = proc.wait()
+    if exit_code != 0:
+        raise PkgConfigError(stderr.decode('ISO8859-1'))
+    return stdout
+
+
+def decode_path_output(s):
+    if sys.version_info[0] < 3:
+        return s  # no need to decode, and safer not to do it
+    # we don't really know in which encoding pkgconfig
+    # outputs its results, so we try to guess
+    for encoding in (sys.getfilesystemencoding(),
+                     sys.getdefaultencoding(),
+                     'utf8'):
+        try:
+            return s.decode(encoding)
+        except UnicodeDecodeError: pass
+    return s.decode('iso8859-1')
+
+
+# try to find LuaJIT installation using pkgconfig
+
+def check_lua_installed(package='luajit', min_version='2'):
+    try:
+        cmd_output('pkg-config %s --exists' % package)
+    except RuntimeError:
+        # pkg-config gives no stdout when it is given --exists and it cannot
+        # find the package, so we'll give it some better output
+        error = sys.exc_info()[1]
+        if not error.args[0]:
+            raise RuntimeError("pkg-config cannot find an installed %s" % package)
+        raise
+
+    lua_version = cmd_output('pkg-config %s --modversion' % package).decode('iso8859-1')
+    try:
+        if tuple(map(try_int, lua_version.split('.'))) < tuple(map(try_int, min_version.split('.'))):
+            raise PkgConfigError("Expected version %s+ of %s, but found %s" %
+                                 (min_version, package, lua_version))
+    except (ValueError, TypeError):
+        print("failed to parse version '%s' of installed %s package, minimum is %s" % (
+            lua_version, package, min_version))
+    else:
+        print("pkg-config found %s version %s" % (package, lua_version))
+
+
+def lua_include(package='luajit'):
+    cflag_out = cmd_output('pkg-config %s --cflags-only-I' % package)
+    cflag_out = decode_path_output(cflag_out)
+
+    def trim_i(s):
+        if s.startswith('-I'):
+            return os.path.expanduser(s[2:])
+        return os.path.expanduser(s)
+    return list(map(trim_i, cflag_out.split()))
+
+
+def lua_libs(package='luajit'):
+    libs_out = cmd_output('pkg-config %s --libs' % package)
+    libs_out = decode_path_output(libs_out)
+    def expand_user(s):
+        return s.replace('~',os.path.expanduser('~'))
+    return list(map(expand_user, libs_out.split()))
+
+
+basedir = os.path.abspath(os.path.dirname(__file__))
+
+
+# check if LuaJIT is in a subdirectory and build statically against it
+
+def find_lua_build(no_luajit=False):
+    # try to find local LuaJIT2 build
+    os_path = os.path
+    for filename in os.listdir(basedir):
+        if not filename.lower().startswith('luajit'):
+            continue
+        filepath = os_path.join(basedir, filename, 'src')
+        if not os_path.isdir(filepath):
+            continue
+        libfile = os_path.join(filepath, 'libluajit.a')
+        if os_path.isfile(libfile):
+            print("found LuaJIT build in %s" % filepath)
+            print("building statically")
+            return dict(extra_objects=[libfile],
+                        include_dirs=[filepath])
+        # also check for lua51.lib, the Windows equivalent of libluajit.a
+        for libfile in iglob(os_path.join(filepath, 'lua5?.lib')):
+            if os_path.isfile(libfile):
+                print("found LuaJIT build in %s (%s)" % (
+                    filepath, os.path.basename(libfile)))
+                print("building statically")
+                # And return the dll file name too, as we need to
+                # include it in the install directory
+                return dict(extra_objects=[libfile],
+                            include_dirs=[filepath],
+                            libfile=os.path.basename(libfile))
+    print("No local build of LuaJIT2 found in lutorpy directory")
+
+    # try to find installed LuaJIT2 or Lua
+    if no_luajit:
+        packages = []
+    else:
+        packages = [('luajit', '2')]
+    packages += [
+        (name, lua_version)
+        for lua_version in ('5.2', '5.1')
+        for name in ('lua%s' % lua_version, 'lua-%s' % lua_version, 'lua')
+    ]
+
+    for package_name, min_version in packages:
+        print("Checking for installed %s library using pkg-config" %
+              package_name)
+        try:
+            check_lua_installed(package_name, min_version)
+            return dict(extra_objects=lua_libs(package_name),
+                        include_dirs=lua_include(package_name))
+        except RuntimeError:
+            print("Did not find %s using pkg-config: %s" % (
+                package_name, sys.exc_info()[1]))
+
+    error = ("None of LuaJIT2, Lua 5.1 or Lua 5.2 were found. Please install "
+             "Lua and its development packages, "
+             "or put a local build into the lutorpy main directory.")
+    print(error)
+    return {}
+
+
+def has_option(name):
+    if name in sys.argv[1:]:
+        sys.argv.remove(name)
+        return True
+    return False
+
+libraries = []
+libraries.append('luaT')
+libraries.append('TH')
+
+import numpy
+config = find_lua_build(no_luajit=has_option('--no-luajit'))
+includes = config.get('include_dirs')
+includes.append(numpy.get_include())
+ext_args = {
+    'extra_objects': config.get('extra_objects'),
+    'include_dirs': includes,
+    'libraries': libraries,
+    'library_dirs': config.get('libdir'),
+    'runtime_library_dirs':  config.get('libdir')
+}
+
+
+
+macros = [('LUA_COMPAT_ALL', None)]
+if has_option('--without-assert'):
+    macros.append(('CYTHON_WITHOUT_ASSERTIONS', None))
+if has_option('--with-lua-checks'):
+    macros.append(('LUA_USE_APICHECK', None))
+ext_args['define_macros'] = macros
+
+
+# check if Cython is installed, and use it if requested or necessary
+use_cython = has_option('--with-cython')
+if not use_cython:
+    if not os.path.exists(os.path.join(os.path.dirname(__file__), 'lutorpy', '_lupa.c')):
+        print("generated sources not available, need Cython to build")
+        use_cython = True
+        
+cythonize = None
+source_extension = ".c"
+if use_cython:
+    try:
+        import Cython.Compiler.Version
+        from Cython.Build import cythonize
+        print("building with Cython " + Cython.Compiler.Version.version)
+        source_extension = ".pyx"
+    except ImportError:
+        print("WARNING: trying to build with Cython, but it is not installed")
+else:
+    print("building without Cython")
+
+ext_modules = [
+    Extension(
+        'lutorpy._lupa',
+        sources = ['lutorpy/_lupa'+source_extension],
+        **ext_args
+    )
+]
+
+if cythonize is not None:
+    ext_modules = cythonize(ext_modules)
+
+
+def read_file(filename):
+    with open(os.path.join(basedir, filename)) as f:
+        return f.read()
+
+
+def write_file(filename, content):
+    with open(os.path.join(basedir, filename), 'w') as f:
+        f.write(content)
+
+
+long_description = '\n\n'.join([
+    read_file(text_file)
+    for text_file in ['README.md']])
+
+write_file(os.path.join('lutorpy', 'version.py'), "__version__ = '%s'\n" % VERSION)
+
+if config.get('libfile'):
+    # include lua51.dll in the lib folder if we are on windows
+    extra_setup_args['package_data'] = {'lutorpy': [config['libfile']], '': ['README.md']}
+
+
+# call distutils
+
+setup(
+    name="lutorpy",
+    version=VERSION,
+    author="Wei OUYANG",
+    author_email="wei.ouyang@cri-paris.org",
+    maintainer="Wei OUYANG",
+    maintainer_email="wei.ouyang@cri-paris.org",
+    url="https://github.com/oeway/lutorpy",
+    description="Python wrapper for torch and Lua/LuaJIT",
+
+    long_description=long_description,
+    license='MIT style',
+    classifiers=[
+        'Development Status :: 5 - Production/Stable',
+        'Intended Audience :: Developers',
+        'Intended Audience :: Information Technology',
+        'License :: OSI Approved :: MIT License',
+        'Programming Language :: Cython',
+        'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 2.6',
+        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.2',
+        'Programming Language :: Python :: 3.3',
+        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Other Scripting Engines',
+        'Operating System :: OS Independent',
+        'Topic :: Software Development',
+    ],
+    install_requires=['numpy','future'],
+    packages=['lutorpy'],
+    ext_modules=ext_modules,
+    **extra_setup_args
+)
