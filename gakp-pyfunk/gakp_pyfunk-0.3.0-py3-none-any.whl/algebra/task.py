@@ -1,0 +1,66 @@
+from pyfunk.combinators import compose as _compose
+from pyfunk.algebra import Algebra as _Algebra
+
+
+class Task(_Algebra):
+
+    def __init__(self, fn):
+        '''
+        Create new Task
+        @sig a -> Task a b
+        '''
+        self.fork = fn
+
+    @classmethod
+    def of(cls, x):
+        '''
+        Factory for creating new resolved task
+        @sig of :: b -> Task _ b
+        '''
+        return Task(lambda _, resolve: resolve(x))
+
+    @classmethod
+    def rejected(cls, x):
+        '''
+        Factory for creating a rejected task
+        @sig rejected :: a -> Task a _
+        '''
+        return Task(lambda reject, _: reject(x))
+
+    def fmap(self, fn):
+        '''
+        Transforms the resolved value of the task using the given function
+        @sig fmap :: Task a b => (b -> c) -> Task a c
+        '''
+        return Task(lambda rej, res: self.fork(rej, _compose(res, fn)))
+
+    def rejected_fmap(self, fn):
+        '''
+        Transforms the rejected value of the task using the given function
+        @sig rejected_fmap :: Task a b => (a -> c) -> Task c b
+        '''
+        return Task(lambda rej, res: self.fork(_compose(rej, fn), res))
+
+    def join(self):
+        '''
+        Lifts a Task out of another
+        @sig join :: Task a b => Task a Task a b -> Task a b
+        '''
+        return Task(lambda rej, res: self.fork(rej,
+                    lambda x: x.fork(rej, res)))
+
+    def or_else(self, fn):
+        '''
+        Transforms a failure value into a new `Task[α, β]`. Does nothing if the
+        structure already contains a successful value.
+        @sig chain :: Task a b => (a -> Task c) -> Task c b
+        '''
+        return Task(lambda rej, res: self.fork(lambda x: fn(x).fork(rej, res), res))
+
+    def freduce(self, fn, x):
+        '''
+        [WIP]
+        Equivalent of reduce for arrays
+        @sig freduce :: Task t => _ -> _ -> a
+        '''
+        pass
