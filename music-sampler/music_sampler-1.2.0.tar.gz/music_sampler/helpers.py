@@ -1,0 +1,224 @@
+# -*- coding: utf-8 -*-
+import argparse
+import sys
+import os
+import math
+import sounddevice as sd
+import logging
+import gettext
+gettext.install('music_sampler')
+Logger = logging.getLogger("kivy")
+
+from . import sysfont
+
+class Config:
+    pass
+
+def find_font(name, style=sysfont.STYLE_NONE):
+    if getattr(sys, 'frozen', False):
+        font = sys._MEIPASS + "/fonts/{}_{}.ttf".format(name, style)
+    else:
+        font = sysfont.get_font(name, style=style)
+        if font is not None:
+            font = font[4]
+    return font
+
+def register_fonts():
+    from kivy.core.text import LabelBase
+
+    ubuntu_regular = find_font("Ubuntu", style=sysfont.STYLE_NORMAL)
+    ubuntu_bold = find_font("Ubuntu", style=sysfont.STYLE_BOLD)
+    symbola = find_font("Symbola")
+
+    if ubuntu_regular is None:
+        error_print("Font Ubuntu regular could not be found, "
+                "please install it.", exit=True)
+    if symbola is None:
+        error_print("Font Symbola could not be found, please install it.",
+                exit=True)
+    if ubuntu_bold is None:
+        warn_print("Font Ubuntu Bold could not be found.")
+
+    LabelBase.register(name="Ubuntu",
+            fn_regular=ubuntu_regular,
+            fn_bold=ubuntu_bold)
+    LabelBase.register(name="Symbola",
+            fn_regular=symbola)
+
+
+def path():
+    if getattr(sys, 'frozen', False):
+        return sys._MEIPASS + "/"
+    else:
+        return os.path.dirname(os.path.realpath(__file__))
+
+def parse_args():
+    argv = sys.argv[1 :]
+    sys.argv = sys.argv[: 1]
+    if "--" in argv:
+        index = argv.index("--")
+        kivy_args = argv[index+1 :]
+        argv = argv[: index]
+
+        sys.argv.extend(kivy_args)
+
+    os.environ["KIVY_NO_CONFIG"] = 'true'
+    sys.argv.extend(["-c", "kivy:log_level:warning"])
+    sys.argv.extend(["-c", "kivy:log_dir:/tmp"])
+    sys.argv.extend(["-c", "kivy:log_name:/tmp/music_sampler_%_.txt"])
+
+    parser = argparse.ArgumentParser(
+            description=_("A Music Sampler application."),
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("-c", "--config",
+            default="config.yml",
+            required=False,
+            help=_("Config file to load"))
+    parser.add_argument("-p", "--music-path",
+            default=".",
+            required=False,
+            help=_("Folder in which to find the music files"))
+    parser.add_argument("-d", "--debug",
+            nargs=0,
+            action=DebugModeAction,
+            help=_("Print messages in console"))
+    parser.add_argument("-m", "--builtin-mixing",
+            action="store_true",
+            help=_("Make the mixing of sounds manually\
+                    (do it if the system cannot handle it correctly)"))
+    parser.add_argument("-l", "--latency",
+            default="high",
+            required=False,
+            help=_("Latency: low, high or number of seconds"))
+    parser.add_argument("-b", "--blocksize",
+            default=0,
+            type=int,
+            required=False,
+            help=_("Blocksize: If not 0, the number of frames to take\
+                    at each step for the mixer"))
+    parser.add_argument("-f", "--frame-rate",
+            default=44100,
+            type=int,
+            required=False,
+            help=_("Frame rate to play the musics"))
+    parser.add_argument("-x", "--channels",
+            default=2,
+            type=int,
+            required=False,
+            help=_("Number of channels to use"))
+    parser.add_argument("-s", "--sample-width",
+            default=2,
+            type=int,
+            required=False,
+            help=_("Sample width (number of bytes for each frame)"))
+    parser.add_argument("-V", "--version",
+            action="version",
+            help=_("Displays the current version and exits. Only use\
+                    in bundled package"),
+            version=show_version())
+    parser.add_argument("--device",
+            action=SelectDeviceAction,
+            help=_("Select this sound device")
+            )
+    parser.add_argument("--list-devices",
+            nargs=0,
+            action=ListDevicesAction,
+            help=_("List available sound devices")
+            )
+    parser.add_argument("--no-focus-warning",
+            action='store_true',
+            help=_("Don't show warning when focus is lost")
+            )
+    parser.add_argument("-L", "--language",
+            required=False,
+            default="fr",
+            help=_("Select another language")
+            )
+    parser.add_argument('--',
+            dest="args",
+            help=_("Kivy arguments. All arguments after this are interpreted\
+                    by Kivy. Pass \"-- --help\" to get Kivy's usage."))
+
+    args = parser.parse_args(argv)
+
+    Config.yml_file = args.config
+
+    Config.latency = args.latency
+    Config.blocksize = args.blocksize
+    Config.frame_rate = args.frame_rate
+    Config.channels = args.channels
+    Config.sample_width = args.sample_width
+    Config.builtin_mixing = args.builtin_mixing
+    Config.no_focus_warning = args.no_focus_warning
+    if args.language != 'en':
+        gettext.translation("music_sampler",
+                localedir=path() + '/locales',
+                languages=[args.language]).install()
+    if args.music_path.endswith("/"):
+        Config.music_path = args.music_path
+    else:
+        Config.music_path = args.music_path + "/"
+
+class DebugModeAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        sys.argv.extend(["-c", "kivy:log_level:debug"])
+
+class SelectDeviceAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        sd.default.device = values
+
+class ListDevicesAction(argparse.Action):
+    nargs = 0
+    def __call__(self, parser, namespace, values, option_string=None):
+        print(sd.query_devices())
+        sys.exit()
+
+def show_version():
+    if getattr(sys, 'frozen', False):
+        with open(path() + ".pyinstaller_commit", "r") as f:
+            return f.read()
+    else:
+        return _("option '-V' can only be used in bundled package")
+
+def duration_to_min_sec(duration):
+    minutes = int(duration / 60)
+    seconds = int(duration) % 60
+    if minutes < 100:
+        return "{:2}:{:0>2}".format(minutes, seconds)
+    else:
+        return "{}:{:0>2}".format(minutes, seconds)
+
+def gain(volume, old_volume=None):
+    if old_volume is None:
+        return 20 * math.log10(max(volume, 0.1) / 100)
+    else:
+        return [
+                20 * math.log10(max(volume, 0.1) / max(old_volume, 0.1)),
+                max(volume, 0)]
+
+def debug_print(message, with_trace=None):
+    if with_trace is None:
+        with_trace = (Logger.getEffectiveLevel() < logging.WARN)
+    with_trace &= (sys.exc_info()[0] is not None)
+
+    Logger.debug('MusicSampler: ' + message, exc_info=with_trace)
+
+def error_print(message, exit=False, with_trace=None):
+    if with_trace is None:
+        with_trace = (Logger.getEffectiveLevel() < logging.WARN)
+    with_trace &= (sys.exc_info()[0] is not None)
+
+    # FIXME: handle it correctly when in a thread
+    if exit:
+        Logger.critical('MusicSampler: ' + message, exc_info=with_trace)
+        sys.exit(1)
+    else:
+        Logger.error('MusicSampler: ' + message, exc_info=with_trace)
+
+def warn_print(message, with_trace=None):
+    if with_trace is None:
+        with_trace = (Logger.getEffectiveLevel() < logging.WARN)
+    with_trace &= (sys.exc_info()[0] is not None)
+
+    Logger.warn('MusicSampler: ' + message, exc_info=with_trace)
+
