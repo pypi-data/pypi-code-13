@@ -1,0 +1,32 @@
+# -*- coding: utf-8 -*-
+import os
+from setuptools import setup, find_packages
+
+long_description = "Python configuration files in Python."
+
+try:
+    from pypandoc import convert
+    long_description = convert(f, "rst")
+except ImportError:
+    pass
+
+setup(
+	name="Meh",
+	version="1.1",
+	author="Philip Trauner",
+	author_email="philip.trauner@aol.com",
+	url="https://github.com/PhilipTrauner/Meh",
+	packages=find_packages(),
+	test_suite="Tests.tests.tests",
+	description="Python configuration files in Python.",
+	long_description=long_description,
+	classifiers=[
+		"Development Status :: 5 - Production/Stable",
+		"Programming Language :: Python :: 2.7",
+		"Programming Language :: Python :: 3.4",
+		"Programming Language :: Python :: 3.5",
+		"Intended Audience :: Developers",
+		"License :: OSI Approved :: MIT License",
+	],
+	keywords=["config", "cfg", "meh", "py", "json"]
+)
