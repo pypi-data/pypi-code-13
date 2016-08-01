@@ -1,0 +1,207 @@
+import os
+import sys
+#sys.path.append('/Users/carlomazzaferro/Documents/Code/variantannotation-master')
+
+from variantannotation import annotate_batch
+from variantannotation import myvariant_parsing_utils
+from variantannotation import mongo_DB_export
+from variantannotation import create_output_files
+from variantannotation import utilities
+from variantannotation import MongoDB_querying
+
+
+#set paths
+filepath = "/Users/carlomazzaferro/Desktop/CSV to be tested"
+csv_file = "somatic_mutect_processed.hg19_multianno.csv"
+vcf_file = "somatic_mutect_old.vcf"
+os.chdir(filepath)
+
+
+#ANNOVAR_PATH = '/database/annovar/'
+#IN_PATH = '/data/Nof1/file.vcf'
+#OUT_PATH = '/data/ccbb_internal/interns/Carlo/annovar_results'
+
+#1. Get csv file: run annovar
+#utilities.run_annovar(ANNOVAR_PATH, IN_PATH, OUT_PATH)
+
+
+#METHOD 1: by chunks, iteratively.
+chunksize = 1000
+step = 0
+collection_name = 'ANNOVAR_MyVariant_chunks'
+db_name = 'My_Variant_Database'
+
+#Get variant list. Should always be the first step after running ANNOVAR
+open_file = myvariant_parsing_utils.VariantParsing()
+list_file = open_file.get_variants_from_vcf(vcf_file)
+
+
+#Run process, export to MongoDB in-built
+as_batch = annotate_batch.AnnotationMethods()
+as_batch.by_chunks(list_file, chunksize, step, csv_file, collection_name, db_name)
+
+#Apply filter(s).
+filter_collection = MongoDB_querying.Filters(db_name, collection_name)
+
+rare_cancer_variants = filter_collection.rare_cancer_variant()
+rare_disease_variants = filter_collection.rare_disease_variant()
+cadd_phred_high_impact_variants = filter_collection.rare_high_impact_variants()
+
+#Create 4 output files: annotated vcf, annotated csv, filtered vcf, filtered csv
+#Annotated vcf and csv, unfiltered. Will contain all info coming from annovar and myvariant
+
+out_unfiltered_vcf_file = filepath + "/out_unfilterd_vcf_annotated.vcf"
+out_unfiltered_csv_file = filepath + "/out_csv_annotated.csv"
+
+rare_cancer_variants_csv = filepath + "/rare_cancer_vars.csv"
+rare_cancer_variants_vcf = filepath + "/rare_cancer_vars.vcf"
+
+rare_disease_variants_csv = filepath + "/rare_disease_vars.csv"
+rare_diseasw_variants_vcf = filepath + "/rare_disease_vars.vcf"
+
+cadd_phred_high_impact_variants_csv = filepath + "/cadd_phred_high_impact_variants.csv"
+cadd_phred_high_impact_variants_vcf = filepath + "/cadd_phred_high_impact_variants.vcf"
+
+in_vcf_file = filepath + "/somatic_mutect_old.vcf.gz"
+
+#Create writer object
+my_writer_1 = create_output_files.FileWriter(db_name, collection_name)
+#Write collection to csv and vcf
+my_writer_1.generate_unfiltered_annotated_csv(out_unfiltered_csv_file)
+my_writer_1.generate_unfiltered_annotated_vcf(in_vcf_file, out_unfiltered_vcf_file)
+
+#Crete writer object for filtered lists:
+my_writer_2 = create_output_files.FileWriter()
+
+#cancer variants filtered files
+my_writer_2.generate_annotated_csv(rare_cancer_variants, rare_cancer_variants_csv)
+my_writer_2.generate_annotated_vcf(rare_cancer_variants, rare_cancer_variants_vcf)
+
+#disease variants filtered files
+my_writer_2.generate_annotated_csv(rare_disease_variants, rare_disease_variants)
+my_writer_2.generate_annotated_vcf(rare_disease_variants, rare_disease_variants)
+
+#high impact cadd_phredd filtered files
+my_writer_2.generate_annotated_csv(cadd_phred_high_impact_variants, cadd_phred_high_impact_variants_csv)
+my_writer_2.generate_annotated_vcf(cadd_phred_high_impact_variants, cadd_phred_high_impact_variants_vcf)
+
+
+
+#---------------#--------------#---------------#--------------#---------------#--------------#---------------#
+
+#METHOD 2: usign full file, and holding it in memory (OK for smaller files)   ##TEST THIS##
+
+#get variant list. Should always be the first step after running ANNOVAR
+open_file = myvariant_parsing_utils.VariantParsing()
+list_file = open_file.get_variants_from_vcf(vcf_file)
+
+#Run process, data saved to joint_list
+as_one_file = annotate_batch.AnnotationMethods()
+joint_list = as_one_file.full_file(list_file, csv_file)
+
+#Name Collection & DB
+collection_name = 'ANNOVAR_MyVariant_full'
+db_name = 'My_Variant_Database'
+
+#Export
+exporting_function = mongo_DB_export.export
+exporting_function(joint_list, collection_name, db_name)
+
+#Generate output files
+out_vcf_file = filepath + "/Tumor_RNAseq_rare_variants_ANNOTATED_FULL.vcf"
+out_csv_file = filepath + "/Tumor_RNAseq_rare_variants_ANNOTATED_FULL.csv"
+in_vcf_file = filepath + "/Tumor_RNAseq_rare_variants_VCF.vcf"
+create_output_files.generate_annotated_vcf(joint_list, in_vcf_file, out_vcf_file)
+create_output_files.generate_annotated_csv(joint_list, out_csv_file)
+
+#Filtering
+
+
+#---------------#--------------#---------------#--------------#---------------#--------------#---------------#
+#METHOD 3: ignore annovar, get data solely from myvariant (much faster, requires nothing but a VCF file.
+#will however be incomplete (some variants will have no information).
+
+#Get variant list form vcf file
+open_file = myvariant_parsing_utils.VariantParsing()
+list_file = open_file.get_variants_from_vcf(vcf_file)
+
+#Run process
+my_variants = annotate_batch.AnnotationMethods()
+myvariant_data = my_variants.my_variant_at_once(list_file)
+
+#Name Collection & DB
+collection_name = 'My_Variant_Info_Collection_Full'
+db_name = 'My_Variant_Database'
+
+#Export
+exporting_function = mongo_DB_export.export
+exporting_function(myvariant_data, collection_name, db_name)
+
+#---------------#--------------#---------------#--------------#---------------#--------------#---------------#
+#METHOD 4: ignore annovar, Get data solely from myvariant (much faster, requires nothing but a VCF file.
+#will however be incomplete (some variants will have no information).
+#Do so BY CHUNKS. Export function is built in the methods myvariant_chunks
+
+chunksize = 1000
+step = 0
+
+#Get variant list from vcf file
+open_file = myvariant_parsing_utils.VariantParsing()
+list_file = open_file.get_variants_from_vcf(vcf_file)
+
+#Name Collection & DB
+collection_name = 'My_Variant_Info_Collection_Chunks'
+db_name = 'My_Variant_Database'
+
+#Run process, export to MongoDB in-built
+my_variants = annotate_batch.AnnotationMethods()
+myvariant_data = my_variants.myvariant_chunks(list_file, chunksize, step, collection_name, db_name)
+
+
+out_vcf_file = filepath + "/Tumor_RNAseq_rare_variants_ANNOTATED_MYV_FULL.vcf"
+out_csv_file = filepath + "/Tumor_RNAseq_rare_variants_ANNOTATED_MyV_FULL.csv"
+in_vcf_file = filepath + "/Tumor_RNAseq_rare_variants_VCF.vcf"
+create_output_files.generate_annotated_vcf(myvariant_data, in_vcf_file, out_vcf_file)
+create_output_files.generate_annotated_csv(myvariant_data, out_csv_file)
+
+
+
+
+
+
+########DEBUG#########
+collection_name = 'ANNOVAR_MyVariant_chunks'
+db_name = 'My_Variant_Database'
+
+
+
+
+from variantannotation import myvariant_parsing_utils
+from variantannotation import csv_to_df
+from variantannotation import annovar_processing
+
+open_file = myvariant_parsing_utils.VariantParsing()
+list_file = open_file.get_variants_from_vcf(vcf_file)
+
+
+df = csv_to_df.parse_to_df(csv_to_df.open_and_parse(csv_file))
+list1 = annovar_processing.get_list_from_annovar_csv(df, list_file[0:5000])
+open_file = myvariant_parsing_utils.VariantParsing()
+from_myvariant = open_file.get_dict_myvariant(list_file[0:5000])
+utilities.final_joint(list1, from_myvariant)
+joined_list = list1
+
+for i in range(0, len(joined_list)):
+    if '0.00' in joined_list[i].keys():
+        print joined_list[i]
+
+from pymongo import MongoClient
+client = MongoClient()
+db = client.My_Variant_Database
+collection = db.ANNOVAR_MyVariant_chunks
+collection.insert_many(joined_list)
+
+
+from variantannotation import csv_to_df
+
+lil = csv_to_df.open_and_parse_chunks(csv_file, 10000, 0)
