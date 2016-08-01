@@ -1,0 +1,11 @@
+#!/usr/bin/env python
+
+"""
+Copyright (c) 2006-2016 sqlmap developers (http://sqlmap.org/)
+See the file 'doc/COPYING' for copying permission
+"""
+
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
