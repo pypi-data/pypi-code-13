@@ -1,0 +1,7 @@
+# coding: utf-8
+
+BROKER_URL = 'redis://localhost:16379'
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_ENABLE_UTC = True
