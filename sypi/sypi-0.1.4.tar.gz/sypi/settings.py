@@ -1,0 +1,2 @@
+SYPI_LOG_PATH = './logs'
+SYPI_LOGGING_LEVEL = 'info'
