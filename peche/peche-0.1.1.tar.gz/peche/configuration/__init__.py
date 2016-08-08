@@ -1,0 +1,1 @@
+from peche.configuration.configuration import Configuration
