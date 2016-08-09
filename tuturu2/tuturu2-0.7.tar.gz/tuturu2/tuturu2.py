@@ -1,0 +1,25 @@
+import pickle 
+
+def load(path):
+    try:
+        file = open(path, "rb")
+        tuturu = pickle.load(file)
+        file.close()
+        return tuturu
+    except Exception:
+        return None
+        
+def dump(var, path):
+    try:
+        file = open(path, "wb")
+        pickle.dump(var, file)
+        file.close()
+        return True
+    except Exception:
+        return False
+
+def main():
+    print("hello main") 
+
+if __name__ == "__main__":
+    main()
