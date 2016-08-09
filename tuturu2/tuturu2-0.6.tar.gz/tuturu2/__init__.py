@@ -1,0 +1,5 @@
+__title__ = 'tuturu2'
+__version__ = '0.4'
+__author__ = 'pickle' 
+__license__ = 'GPL 3.0'
+__copyright__ = 'Pickle'
