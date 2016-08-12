@@ -1,0 +1,122 @@
+import os
+import re
+import glob
+import distutils.log
+
+try:
+    import setuptools
+except ImportError:
+    import distutils.core
+
+    setup = distutils.core.setup
+else:
+    setup = setuptools.setup
+
+PACKAGE = next((str(s) for s in setuptools.find_packages('.', exclude=("tests", "tests.*"))), None)
+PWD = os.path.abspath(os.path.dirname(__file__))
+VERSION = (
+    re
+        .compile(r".*__version__ = '(.*?)'", re.S)
+        .match(open(os.path.join(PWD, PACKAGE, "__init__.py")).read())
+        .group(1)
+)
+PYPI_USERNAME = "phuonghqh"
+PYPI_PASSWORD = "SiHill098"
+# PYPI_USERNAME = os.environ["PYPI_USERNAME"]
+# PYPI_PASSWORD = os.environ["PYPI_PASSWORD"]
+
+with open(os.path.join(PWD, "README.md")) as f:
+    README = f.read()
+
+dependency_links = [
+    "git://github.com/finix-payments/wac.git@v0.26#egg=wac-0.26"
+]
+
+requires = [
+    "coreapi==1.20.0",
+    "wac==0.26",
+    "wheel==0.29",
+    "twine==1.8.1"
+]
+
+extras_require = {
+    "tests": [
+        "nose",
+        "coverage"
+    ]
+}
+
+scripts = [
+    # 'bin/citadel'
+]
+
+
+class UploadCommand(distutils.cmd.Command):
+    description = "upload to PyPI"
+    user_options = []
+
+    def run(self):
+        from twine.commands import upload as twine_upload
+        from twine.commands import register as twine_register
+
+        self.announce('running upload %s to PyPI' % str(PACKAGE), level=distutils.log.INFO)
+        for package in glob.glob("dist/*"):
+            twine_register.register(
+                package=package,
+                repository="pypi",
+                username=PYPI_USERNAME,
+                password=PYPI_PASSWORD,
+                comment=None,
+                config_file=".pypirc",
+                cert=None,
+                client_cert=None,
+                repository_url=None
+            )
+
+        twine_upload.upload(
+            dists=["dist/*"],
+            repository="pypi",
+            sign=False,
+            identity=None,
+            username=PYPI_USERNAME,
+            password=PYPI_PASSWORD,
+            comment=None,
+            sign_with="gpg",
+            config_file=".pypirc",
+            skip_existing=True,
+            cert=None,
+            client_cert=None,
+            repository_url=None
+        )
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
+
+setup(
+    name=PACKAGE,
+    version=VERSION,
+    description='test app',
+    long_description=README,
+    classifiers=[
+        "Programming Language :: Python",
+    ],
+    author='Very Good',
+    author_email='dev@vgs.io',
+    license='MIT License',
+    packages=[PACKAGE],
+    include_package_data=True,
+    zip_safe=False,
+    scripts=scripts,
+    dependency_links=dependency_links,
+    install_requires=requires,
+    extras_require=extras_require,
+    tests_require=extras_require['tests'],
+    test_suite='nose.collector',
+    cmdclass={
+        'upload': UploadCommand,
+    }
+)
