@@ -1,0 +1,2 @@
+gh_key = "3cc255680659bda69ab069ece3eb2aaf44426013"
+gh_test_key = "26eb89ce891a41c26a038b4658129bff29b3fac2"
