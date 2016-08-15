@@ -1,0 +1,12 @@
+from setuptools import setup
+
+setup(name='m3s_scraper',
+      version='0.1.1',
+      description='A tool for exporting M3S data',
+      url='https://github.com/themotionmachine/m3s_scrapert',
+      author='RTW',
+      author_email='ryan_t_w@utexas.edu',
+      license='MIT',
+      packages=['m3s_scraper'],
+      install_requires=['selenium', 'unicodecsv'],
+      zip_safe=False)
