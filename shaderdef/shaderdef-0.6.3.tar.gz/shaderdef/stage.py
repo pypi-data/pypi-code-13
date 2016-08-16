@@ -1,0 +1,172 @@
+from ast import fix_missing_locations
+from typing import Iterator, Sequence, get_type_hints
+
+from shaderdef.ast_util import (make_assign,
+                                make_self_attr_load,
+                                make_self_attr_store,
+                                parse_source,
+                                remove_function_parameters,
+                                remove_function_return_type,
+                                rename_function)
+from shaderdef.find_deps import find_deps
+from shaderdef.find_function import find_function
+from shaderdef.interface import AttributeBlock
+from shaderdef.lift_attributes import lift_attributes
+from shaderdef.rename_ast_nodes import rename_ast_nodes
+from shaderdef.rewrite_output import rewrite_return_as_assignments
+from shaderdef.unselfify import unselfify
+from shaderdef.py_to_glsl import py_to_glsl
+
+
+def make_prefix(name):
+    parts = name.split('_')
+    return ''.join(part[0] for part in parts) + '_'
+
+
+def get_output_interface(func):
+    return_type = get_type_hints(func).get('return')
+    if return_type is None:
+        return None
+    # Unwrap iterators (used for geom shader output)
+    origin = getattr(return_type, '__origin__', None)
+    if origin is not None and origin == Iterator:
+        return_type = return_type.__parameters__[0]
+    return return_type
+
+
+class Stage(object):
+    def __init__(self, func):
+        self.name = func.__name__
+        root = parse_source(func)
+        self.ast_root = find_function(root, self.name)
+        self.input_prefix = ''
+        self.output_prefix = make_prefix(self.name)
+        self._glsl_source = None
+        # TODO
+        self._params = get_type_hints(func)
+        self._params.pop('return', None)
+        self._return_type = get_output_interface(func)
+
+    def find_deps(self):
+        return find_deps(self.ast_root)
+
+    def provide_deps(self, next_stage):
+        for dep in next_stage.find_deps().inputs:
+            if dep not in self.find_deps().outputs:
+                dst = make_self_attr_store(dep)
+                src = make_self_attr_load(dep)
+                assign = make_assign(dst, src)
+                self.ast_root.body.append(assign)
+
+        fix_missing_locations(self.ast_root)
+
+    def required_uniforms(self, all_uniforms):
+        for link in self.find_deps().inputs:
+            unif = all_uniforms.get(link)
+            if unif is not None:
+                yield link, unif
+
+    def load_names(self, external_links):
+        names = {}
+        for link in self.find_deps().inputs:
+            if link not in external_links.uniforms:
+                names[link] = self.input_prefix + link
+        return names
+
+    # TODO(nicholasbishop): de-dup
+    def store_names(self, external_links):
+        names = {}
+        for link in self.find_deps().outputs:
+            # Don't prefix uniforms, external outputs, or builtins
+            if link not in external_links.uniforms and \
+               link not in external_links.frag_outputs and \
+               not link.startswith('gl_'):
+                names[link] = self.output_prefix + link
+        return names
+
+    def declare_frag_outputs(self, lines, external_links):
+        # TODO
+        if self.name != 'frag_shader':
+            return
+        for link, fout in external_links.frag_outputs.items():
+            lines.append(fout.glsl_decl(link))
+
+    def declare_inputs(self, lines):
+        for name, param_type in self._params.items():
+            # TODO(nicholasbishop): dedup with return type
+            origin = getattr(param_type, '__origin__', None)
+            array = None
+            if origin is not None and origin == Sequence:
+                param_type = param_type.__parameters__[0]
+                array = True
+            lines += param_type.declare_input_block(instance_name=name,
+                                                    array=array)
+
+    @staticmethod
+    def define_aux_functions(lines, library):
+        # TODO(nicholasbishop): for now we don't attempt to check if
+        # the function is actually used, just define them all
+        for func in library:
+            func_node = parse_source(func)
+            lines += py_to_glsl(func_node)
+
+    @staticmethod
+    def rename_gl_builtins(ast_root):
+        return rename_ast_nodes(ast_root, {
+            'gl_position': 'gl_Position',
+        })
+
+    @property
+    def glsl(self):
+        if self._glsl_source is None:
+            raise ValueError('shader has not been translated yet')
+        return self._glsl_source
+
+    def translate(self, library):
+        self._glsl_source = self.to_glsl(library)
+
+    def apply_decorators(self):
+        decs = self.ast_root.decorator_list
+        if len(decs) == 1 and decs[0].func.id == 'geom_shader_meta':
+            kwargs = {}
+            for keyword in decs[0].keywords:
+                kwargs[keyword.arg] = keyword.value
+
+            # TODO(nicholasbishop): validate inputs
+            input_primitive = kwargs['input_primitive'].id
+            output_primitive = kwargs['output_primitive'].id
+            max_vertices = int(kwargs['max_vertices'].n)
+
+            yield 'layout({}) in;'.format(input_primitive)
+            yield 'layout({}, max_vertices = {}) out;'.format(output_primitive,
+                                                              max_vertices)
+
+    def to_glsl(self, library):
+        lines = []
+        lines.append('#version 330 core')
+
+        lines += list(self.apply_decorators())
+        self.declare_inputs(lines)
+        self.define_aux_functions(lines, library)
+
+        ast_root = self.ast_root
+
+        # The main shader function must always be "void main()"
+        rename_function(ast_root, 'main')
+        remove_function_parameters(ast_root)
+        remove_function_return_type(ast_root)
+
+        ast_root = rewrite_return_as_assignments(ast_root, self._return_type)
+        ast_root = lift_attributes(ast_root, [
+            param_name
+            for param_name, param_type in self._params.items()
+            if issubclass(param_type, AttributeBlock)
+        ])
+        ast_root = self.rename_gl_builtins(ast_root)
+
+        if self._return_type is not None:
+            lines += self._return_type.declare_output_block()
+
+        ast_root = unselfify(ast_root)
+        lines += py_to_glsl(ast_root)
+        return '\n'.join(lines)
