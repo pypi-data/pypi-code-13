@@ -1,0 +1,2 @@
+class PluginAttributeMissing(Exception):
+    pass
