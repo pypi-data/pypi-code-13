@@ -1,0 +1,24 @@
+#!/usr/local/bin/python3
+
+
+"""
+Module to process lists, and print their contents out to the standard output.
+"""
+
+
+"""
+function which accepts a list as a paremeter, and prints its contents to stdout.
+The function checks each item in the list, to see if it is a list itself (list within a list). If true, the function calls itself (recursion).
+"""
+
+
+def print_lol(the_list):
+    for each_item in the_list:
+        if isinstance(each_item, list):
+            print_lol(each_item)
+        else:
+            print(each_item)
+
+
+
+
