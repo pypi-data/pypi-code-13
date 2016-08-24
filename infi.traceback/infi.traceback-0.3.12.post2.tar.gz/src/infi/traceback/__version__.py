@@ -1,0 +1,10 @@
+__version__ = "0.3.12.post2"
+__git_commiter_name__ = "Arnon Yaari"
+__git_commiter_email__ = "arnony@infinidat.com"
+__git_branch__ = 'develop'
+__git_remote_tracking_branch__ = 'origin/develop'
+__git_remote_url__ = 'git@git.infinidat.com:host-opensource/infi.traceback.git'
+__git_head_hash__ = '8272b30071fea57191d2c7d3995f00076e85ce2b'
+__git_head_subject__ = "Merge branch 'py3' into 'develop'"
+__git_head_message__ = "Python 3 fixes\r\n\r\n* The traceback module doesn't contain the `_print` function in Python 3\r\n* `print_exception` in Python 3 expects a keyword argument named `chain`\r\n\r\nSee merge request !1"
+__git_dirty_diff__ = ''
