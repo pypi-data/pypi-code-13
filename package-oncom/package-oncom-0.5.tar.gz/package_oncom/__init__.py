@@ -1,0 +1,1 @@
+from .my_module import hello1, hello2
