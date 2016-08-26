@@ -1,0 +1,47 @@
+# -*- coding: utf-8 -*-
+
+# 可转化字符串类型的数字为int
+def isint_or(var, replace=0):
+    """
+    判断是否int, 否则使用replace替换
+    :param var:
+    :param replace:
+    :return:
+    """
+    if isinstance(var, int):
+        return var
+    if isinstance(var, basestring) and var.isnumeric():
+        return int(var)
+    return replace
+
+
+
+# 拼接数据为字符串
+# 当把一组ID用逗号分割拼接为字符串时, 使用 str.join()会报错
+# 故需要一个拼接方法, 自适应数据类型拼接成字符串
+def implode(sep, items):
+    """
+    拼接数据为字符串
+    :param sep: 间隔字符
+    :param items: 数据元组
+    :return: string, 拼接后的字符串
+
+    nums = [1,2,3,4,5]
+    nums = implode(":", nums) // >> "1:2:3:4:5"
+
+    """
+    return str(sep).join(map(__stringify, items))
+
+
+def __stringify(v):
+    """
+    implode 转化数据为字符串回调方法
+    """
+    if v is None: return ''
+    if isinstance(v, basestring) and len(v) == 0: return ''
+    return str(v)
+
+
+
+
+
