@@ -1,0 +1,2 @@
+APP_KEY = ""
+AUTH_TOKEN = ""
