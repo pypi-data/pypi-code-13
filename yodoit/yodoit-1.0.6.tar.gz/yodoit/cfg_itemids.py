@@ -1,0 +1,6 @@
+BOARD_ID = ""
+IU_ID = ""
+INU_ID = ""
+UU_ID = ""
+UNU_ID = ""
+DONE_ID = ""
