@@ -1,0 +1,1 @@
+from time_aware_polyline.convert import decode_time_aware_polyline, encode_time_aware_polyline
