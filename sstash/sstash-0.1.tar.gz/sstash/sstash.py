@@ -1,0 +1,36 @@
+from .crypto_stash import CryptoStash
+from .inner_stash import InnerStash
+from .exceptions import SSError, SSCryptoError
+
+class SecureStash:
+    def __init__(self,path,password):
+        self._crypto_stash = CryptoStash(path,password)
+
+    def read_value(self,key):
+        """
+        Read a value from secure stash corresponding to key.
+        """
+        store = self._crypto_stash.read_store()
+        istash = InnerStash(store)
+        return istash.read_value(key)
+
+    def write_value(self,key,value):
+        """
+        Write value to key.
+        """
+        store = self._crypto_stash.read_store()
+        istash = InnerStash(store)
+        istash.write_value(key,value)
+        self._crypto_stash.write_store(istash.get_store())
+
+
+    def remove_key(self,key):
+        """
+        Remove a key from the secure stash.
+        """
+        store = self._crypto_stash.read_store()
+        istash = InnerStash(store)
+        value = istash.remove_key(key)
+        self._crypto_stash.write_store(istash.get_store())
+        return value
+
