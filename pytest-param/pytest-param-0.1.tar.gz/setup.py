@@ -1,0 +1,36 @@
+from setuptools import setup
+
+
+setup(
+    name='pytest-param',
+    use_scm_version=True,
+    description='pytest plugin to test all, first, last or random params',
+    long_description=open('README.rst').read(),
+    url='https://github.com/cr3/pytest-param',
+    author='Marc Tardif',
+    author_email='marc@interunion.ca',
+    py_modules=['pytest_param'],
+    entry_points={'pytest11': ['param = pytest_param']},
+    setup_requires=['setuptools_scm'],
+    install_requires=['pytest>=2.8.7'],
+    license='MIT license',
+    keywords='py.test pytest param',
+    classifiers=[
+        'Development Status :: 4 - Beta',
+        'Framework :: Pytest',
+        'Intended Audience :: Developers',
+        'License :: OSI Approved :: MIT License',
+        'Operating System :: POSIX',
+        'Operating System :: Microsoft :: Windows',
+        'Operating System :: MacOS :: MacOS X',
+        'Topic :: Software Development :: Quality Assurance',
+        'Topic :: Software Development :: Testing',
+        'Topic :: Utilities',
+        'Programming Language :: Python',
+        'Programming Language :: Python :: 2.6',
+        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3.2',
+        'Programming Language :: Python :: 3.3',
+        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
+    ])
