@@ -1,0 +1,10 @@
+__version__ = "0.4.9"
+__git_commiter_name__ = "Guy Rozendorn"
+__git_commiter_email__ = "guy@rzn.co.il"
+__git_branch__ = 'develop'
+__git_remote_tracking_branch__ = 'origin/develop'
+__git_remote_url__ = 'git@git.infinidat.com:host-opensource/infi.asi.git'
+__git_head_hash__ = 'db2ad7b841718a982a1488602a2e16c0db897818'
+__git_head_subject__ = 'Finished Release v0.4.9'
+__git_head_message__ = '* develop:\n  Avoid calling str with bytesarray\n  Python 3 fix\n  Use explicit integer division\n  Fix Python 3 incompatibility'
+__git_dirty_diff__ = ''
